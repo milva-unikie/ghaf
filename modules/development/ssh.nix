@@ -14,6 +14,6 @@ in
 
     services.openssh.enable = true;
 
-    ghaf.firewall.attack-mitigation.ssh.enable = true;
+    ghaf.firewall.attack-mitigation.ssh.enable = false;
   };
 }
