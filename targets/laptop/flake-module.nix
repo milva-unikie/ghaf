@@ -155,6 +155,7 @@ let
         ghaf = {
           reference.profiles.mvp-user-trial.enable = true;
           partitioning.disko.enable = true;
+	  virtualization.microvm.storeOnDisk = true;
         };
       }
     ]))
@@ -208,6 +209,7 @@ let
           partitioning.disko.enable = true;
           profiles.graphics.idleManagement.enable = true;
           profiles.graphics.allowSuspend = false; # Suspension is broken (SSRCSP-7016)
+	  virtualization.microvm.storeOnDisk = true;
 
           virtualization.microvm.guivm.extraModules = [
             {
