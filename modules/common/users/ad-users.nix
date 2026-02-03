@@ -34,7 +34,7 @@ in
         idProvider = "ad";
         dnsProvider = {
           name = "vm-ghaf-dev-dc.ghaf-test.com";
-          ipAddress = "10.52.33.4";
+          ipAddress = "74.162.70.140";
         };
         ad = {
           domain = "ghaf-test.com";
