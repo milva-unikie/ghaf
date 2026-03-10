@@ -153,6 +153,20 @@ let
     })
 
     (ghaf-configuration {
+      name = "intel-laptop-storeDisk";
+      inherit system;
+      profile = "laptop-x86";
+      hardwareModule = self.nixosModules.hardware-intel-laptop;
+      variant = "debug";
+      extraModules = commonModules;
+      extraConfig = {
+        reference.profiles.mvp-user-trial.enable = true;
+        partitioning.disko.enable = true;
+        virtualization.microvm.storeOnDisk = true;
+      };
+    })
+
+    (ghaf-configuration {
       name = "lenovo-t14-amd-gen5";
       inherit system;
       profile = "laptop-x86";
