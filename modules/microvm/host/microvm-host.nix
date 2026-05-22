@@ -205,17 +205,86 @@ in
 
       systemd.services =
         let
-          patchedMicrovmServices = lib.foldl' (
-            result: name:
-            result
-            // {
-              # Prevent microvm restart if shutdown internally. If set to 'on-failure', 'microvm-shutdown'
-              # in ExecStop of the microvm@ service fails and causes the service to restart.
-              "microvm@${name}".serviceConfig = {
-                Restart = "on-abnormal";
-              };
-            }
-          ) { } (lib.attrNames config.microvm.vms);
+          patchedMicrovmServices =
+            lib.foldl'
+              (
+                result: vmName:
+                result
+                // {
+                  # Override microvm’s default shutdown behavior
+                  #
+                  # By default, microvm attempts to shut down the VM by sending a Ctrl+Alt+Del
+                  # sequence and waiting for a socket disconnect:
+                  #   https://github.com/microvm-nix/microvm.nix/blob/main/lib/runners/qemu.nix
+                  #
+                  # In our setup, this does not work because microvm uses socat to wait for input
+                  # from stdio, which is /dev/null under systemd. As a result, the command returns
+                  # immediately, systemd sees the process as still active, and kills it with SIGTERM.
+                  #
+                  # For Ghaf VMs (excluding system VMs), we replace ExecStop with custom logic:
+                  #   1. Send a SIGTERM signal to the associated QEMU process.
+                  #   2. Wait until the associated QEMU process ($MAINPID) exits.
+                  #
+                  # We also shorten TimeoutStopSec from the microvm default (150s) to 30s
+                  "microvm@${vmName}".serviceConfig = {
+                    TimeoutStopSec = "30";
+                    ExecStop =
+                      let
+                        ghaf-vm-stop = pkgs.writeShellScript "ghaf-vm-stop" ''
+                          echo "Sending SIGTERM to VM '${vmName}'"
+                          kill -15 $MAINPID 2>/dev/null
+
+                          echo "Waiting for VM '${vmName}' with QEMU PID=$MAINPID to stop"
+                          while kill -0 $MAINPID 2>/dev/null; do
+                            sleep 1
+                          done
+
+                          echo "VM '${vmName}' with QEMU PID=$MAINPID stopped"
+                        '';
+                      in
+                      [
+                        # Clear previous microvm ExecStop logic
+                        ""
+                        # '+' allows the ghaf-vm-stop script to be executed with full privileges
+                        "+${ghaf-vm-stop}"
+                      ];
+                  };
+                }
+              )
+              { }
+              (
+                lib.attrNames (
+                  lib.filterAttrs (
+                    _: vm:
+                    let
+                      vmConfig = lib.ghaf.vm.getConfig vm;
+                    in
+                    vmConfig != null && vmConfig.ghaf.type != "system-vm"
+                  ) config.microvm.vms
+                )
+              );
+
+          shutdownLastServices =
+            let
+              allVmNames = lib.attrNames config.microvm.vms;
+              shutdownLastVmNames = lib.attrNames (
+                lib.filterAttrs (
+                  _: vm:
+                  let
+                    vmConfig = lib.ghaf.vm.getConfig vm;
+                  in
+                  vmConfig != null && vmConfig.ghaf.shutdownLast
+                ) config.microvm.vms
+              );
+            in
+            lib.listToAttrs (
+              map (
+                vmName:
+                lib.nameValuePair "microvm@${vmName}" {
+                  before = map (n: "microvm@${n}.service") (lib.filter (n: n != vmName) allVmNames);
+                }
+              ) shutdownLastVmNames
+            );
 
           vmsWithEncryptedStorage = lib.filterAttrs (
             _name: vm:
@@ -282,7 +351,7 @@ in
         {
           # Device-id and machine-id generation moved to ghaf.identity.dynamicHostName module
         }
-        // patchedMicrovmServices
+        // lib.recursiveUpdate patchedMicrovmServices shutdownLastServices
         // vmstorageSetupServices;
     })
     (mkIf cfg.sharedVmDirectory.enable {

@@ -264,15 +264,17 @@ let
     name = "guest-power-actions";
     runtimeInputs = [
       pkgs.pci-binder
+      pkgs.systemd
     ];
     text = ''
       case "$1" in
         reboot|poweroff)
           # Signal host to power off or reboot the system
-          ${givc-cli} "$1" &
-          # This is a workaround since the givc-cli does support async requests,
-          # and does not return when starting a reboot or poweroff target
-          sleep 1
+          systemd-run --no-block -u "signal-$1-host" \
+            -p DefaultDependencies=no -p TimeoutSec=5 \
+            -- ${givc-cli} "$1"
+          # This is a workaround since givc-cli does not support async requests,
+          # and may not return (or return an error) when requesting reboot or shutdown
           ;;
         suspend)
           # Script to unbind PCI devices for suspend
@@ -668,6 +670,7 @@ in
             serviceConfig = {
               Type = "oneshot";
               ExecStart = "${getExe guest-shutdown-interceptor}";
+              TimeoutSec = 5;
             };
           };
 
