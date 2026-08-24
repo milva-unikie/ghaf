@@ -19,14 +19,27 @@ in
     # Enable minimal profile as base
     ghaf.profiles.minimal.enable = true;
 
+    # nix-setup.nixpkgs = null only clears nix.nixPath. The registry entry is
+    # written by the upstream nixpkgs-flake module, and it is what actually
+    # keeps the nixpkgs source tree in the runtime closure.
+    nixpkgs.flake = {
+      setFlakeRegistry = false;
+      setNixPath = false;
+    };
+
     # TODO(release-policy): turn this warning into an assertion once the
     # release credential policy and CI provisioning are agreed.
+    # The condition has to include initialPassword: that is where the
+    # well-known default actually lives (modules/common/users/admin.nix), so
+    # testing only the hashed options would fire at anyone who set a real
+    # password there and teach them to ignore the warning.
     warnings =
       lib.optional
         (
           config.ghaf.users.admin.enable
           && config.ghaf.users.admin.hashedPassword == null
           && config.ghaf.users.admin.initialHashedPassword == null
+          && config.ghaf.users.admin.initialPassword == "ghaf"
         )
         "Release image ships the well-known default admin password. Set ghaf.users.admin.hashedPassword (e.g. mkpasswd -m yescrypt) for production images.";
 
@@ -42,7 +55,10 @@ in
           enable = true;
           # Keep nix functional in release but do not pin the full nixpkgs
           # source tree into the closure (registry/nixPath are a debug aid).
-          nixpkgs = lib.mkForce null;
+          # mkOverride 90 rather than mkForce: this only needs to beat the
+          # plain definition in modules/development/flake-module.nix, and
+          # leaves mkForce available to a downstream that wants the pin back.
+          nixpkgs = lib.mkOverride 90 null;
         };
       };
 
