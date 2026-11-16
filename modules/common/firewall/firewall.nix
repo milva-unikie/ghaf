@@ -1115,6 +1115,9 @@ in
           # accept the other packets
           ${ipt} -t filter -A ${ghafFwChainPrefix}conncheck-accept -j ACCEPT
           ### FORWARD rules ###
+          ${optionalString cfg.dynamicChains.enable (
+            setupDynChain "filter" "${ghafFwChainPrefix}fwd-filter" "fwd"
+          )}
           ${ipt} -t filter -A ${ghafFwChainPrefix}fwd-filter -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
           ${optionalString config.networking.nat.enable egressRules}
 
@@ -1178,7 +1181,6 @@ in
       (mkIf cfg.dynamicChains.enable {
         extraCommands = ''
           ${setupDynChain "filter" "${ghafFwChainPrefix}in-filter" "in"}
-          ${setupDynChain "filter" "${ghafFwChainPrefix}fwd-filter" "fwd"}
           ${setupDynChain "mangle" "${ghafFwChainPrefix}pre-mangle" "pre"}
           ${setupDynChain "nat" "${ghafFwChainPrefix}pre-nat" "pre"}
           ${setupDynChain "nat" "${ghafFwChainPrefix}post-nat" "post"}
